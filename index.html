@@ -1286,6 +1286,7 @@ document.head.insertAdjacentHTML("beforeend", `<style>
 .qkind{color:var(--gold2);font-weight:600}
 .newb{display:inline-block;background:var(--gold);color:#1b1404;border-radius:6px;padding:1px 7px;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin-right:6px}
 .card .cardnew{margin-bottom:4px}
+.qwhere{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
 #qtoast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);opacity:0;pointer-events:none;background:var(--glass2);color:var(--ink);border:1px solid var(--edge);border-radius:12px;padding:10px 16px;font-size:14px;z-index:99;transition:opacity .3s,transform .3s;max-width:90vw;text-align:center}
 #qtoast.on{opacity:1;transform:translate(-50%,0)}
 .qtop{position:fixed;right:calc(16px + env(safe-area-inset-right,0px));bottom:calc(20px + env(safe-area-inset-bottom,0px));width:46px;height:46px;border-radius:50%;border:1px solid var(--edge);background:var(--gold);color:#1b1404;font-size:22px;font-weight:700;z-index:60;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.35)}
@@ -1321,6 +1322,17 @@ function summary(x){
   return [s || x.line || "", where && !s.includes(x.p || "~") ? where : ""].filter(Boolean).join(" ");
 }
 
+// where a resource is, from the saved home in Settings: "Online", "about 12 miles away", or its town (Daniel, 5 Nov 2026)
+const qFlat = s => (s || "").replace(/\s*\(.*?\)/g, "").toLowerCase().replace(/^(st|ste)\.?\s/, "saint ").replace(/[^a-z0-9]/g, "");
+function whereText(x){
+  const pl = x.place || (isPlace(x) ? x : null);
+  const xy = pl ? pl.xy : (x.p && x.s && typeof HCITY !== "undefined" ? HCITY[`${qFlat(x.p)}|${x.s}`] : null);
+  const town = pl ? [pl.p, pl.st].filter(Boolean).join(", ") : [x.p, x.s].filter(Boolean).join(", ");
+  if (!xy && !x.p && !pl) return QOL_HMONG ? "No town listed" : x.u ? "Online" : "";   // Hmong places without a town are often real offices, not online
+  const m = xy && typeof homeMi === "function" ? homeMi({xy}) : null;
+  return m !== null ? miText(m) : town;
+}
+
 /* ---------- the action bar on every entry ---------- */
 function actionBar(x){
   const k = keyOf(x), saved = qGet("hcd-saved").includes(k);
@@ -1342,6 +1354,8 @@ function addBar(x){
   const kl = kindLabel(x); if (kl) f.querySelector(".eyebrow")?.insertAdjacentHTML("beforeend", ` · <span class="qkind">${kl}</span>`);
   if (x.new) f.querySelector(".eyebrow")?.insertAdjacentHTML("afterbegin", `<b class="newb">New</b> `);
   const hn = hmongNote(x); if (hn) f.querySelector(".qbar").insertAdjacentHTML("afterend", `<p class="hint qhm">${esc(hn)}</p>`);
+  const wh = isPlace(x) ? "" : whereText(x);   // map places already say how far they are
+  if (wh) f.querySelector(".qbar").insertAdjacentHTML("afterend", `<p class="qph">📍 ${esc(wh)}${/miles? away/.test(wh) && homeGet() ? ` from ${esc(homeGet().label)}` : ""}</p>`);
   const r = qGet("hcd-recent").filter(v => v !== keyOf(x)); r.unshift(keyOf(x)); qSet("hcd-recent", r.slice(0, 10));
   pillCounts();
 }
@@ -1366,7 +1380,8 @@ $("facts").addEventListener("click", e => {
 /* ---------- New badge and kind label on result cards ---------- */
 { const ch = cardsHtml; cardsHtml = function(list){ let i = 0;
     return ch(list).replace(/<span class="k">/g, () => { const x = list[i++] || {}; const kl = kindLabel(x);
-      return `${x.new ? `<b class="newb cardnew">New</b>` : ""}<span class="k">${kl ? `<span class="qkind">${kl}</span> · ` : ""}`; }); }; }
+      const wh = whereText(x);
+      return `${x.new ? `<b class="newb cardnew">New</b>` : ""}${wh ? `<span class="qwhere">📍 ${esc(wh)}</span>` : ""}<span class="k">${kl ? `<span class="qkind">${kl}</span> · ` : ""}`; }); }; }
 
 /* ---------- ♥ Saved, Recent and New on the home page ---------- */
 document.querySelector(".pills").insertAdjacentHTML("beforeend",
@@ -1452,7 +1467,7 @@ if ("serviceWorker" in navigator) {
   // a new version took over: show it right away (once), so people never sit on an old copy
   navigator.serviceWorker.addEventListener("controllerchange", () => { if (had && !sessionStorage.getItem("hmong-dir-reloaded")) { sessionStorage.setItem("hmong-dir-reloaded", "1"); location.reload(); } });
 }
-document.addEventListener("DOMContentLoaded", () => { const f = document.createElement("p"); f.className = "note"; f.style.cssText = "text-align:center;padding:8px 16px 24px"; f.textContent = "App version: updated 05 Nov 2026, 05:41"; document.body.appendChild(f); });
+document.addEventListener("DOMContentLoaded", () => { const f = document.createElement("p"); f.className = "note"; f.style.cssText = "text-align:center;padding:8px 16px 24px"; f.textContent = "App version: updated 05 Nov 2026, 05:43"; document.body.appendChild(f); });
 (() => {
   const bar = document.getElementById("installBar"), btn = document.getElementById("installBtn");
   const installed = matchMedia("(display-mode: fullscreen), (display-mode: standalone)").matches || navigator.standalone;
