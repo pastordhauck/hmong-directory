@@ -396,7 +396,7 @@ html[data-style="festival"] .card,html[data-style="festival"] .tile,html[data-st
 /* known Hmong communities on the wall: a soft pink outline on states, a ring on towns (2020 Census) */
 #wStates path.hm{stroke:#ff8db5;stroke-width:1.6;vector-effect:non-scaling-stroke;stroke-opacity:.85}
 #hTowns{pointer-events:auto}
-#hTowns circle{fill:none;stroke:#ff8db5;stroke-width:1.4;vector-effect:non-scaling-stroke;opacity:.8}
+#hTowns circle{r:calc(var(--rt) * var(--zk, 1) * 1px);fill:none;stroke:#ff8db5;stroke-width:1.4;vector-effect:non-scaling-stroke;opacity:.8}
 #hTowns circle:hover{opacity:1;stroke-width:2.4}
 .wall.back::after{content:"Pink outline: states with 100+ Hmong residents  ·  Pink ring: towns with a Hmong community (2020 Census)";position:absolute;left:18px;bottom:8px;font-size:11px;color:var(--muted);pointer-events:none}
 /* the desk: listings hang like embroidered tags from a beaded string, swing a little when pointed at; the details card is a sash */
@@ -467,8 +467,8 @@ html:is([data-style="light"],[data-style="story"],[data-style="gray"]) .tile .dm
 .zoomwrap .zl{display:flex;flex-direction:column;justify-content:space-between;font-size:11px;color:var(--dim);margin-left:70px}
 @media (max-width:860px){
   .seg button{padding:5px 9px;font-size:12px}
-  .fboxes{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding-bottom:4px}
-  .fbox{flex:none;width:auto;margin:0}
+  .fboxes{display:flex;flex-wrap:wrap;gap:8px;padding-bottom:4px}
+  .fbox{flex:1 1 auto;width:auto;margin:0}
   .lineup .lh{flex-wrap:wrap}
   .tile.big{width:200px}
 }
@@ -925,6 +925,7 @@ function applyView(){
   $("wCities").style.opacity = Math.max(0, Math.min(1, (view.z - 2) / 3));
   $("wRelief").style.opacity = view.z < 5 ? 1 : Math.max(.25, 1 - (view.z - 5) / 10);   // softer up close, where the shading is coarse   // town outlines fade in as you zoom into a state
   $("bDots").style.setProperty("--r", Math.max(.3, 2.8 / Math.pow(view.z, .8)) + "px");
+  $("wsvg").style.setProperty("--zk", 1 / Math.pow(view.z, .8));   // shrinks the Hmong town rings with the zoom, like the dots
   const v = Math.log(view.z) / Math.log(ZMAX); $("vfill").style.height = v * 100 + "%"; $("vknob").style.bottom = v * 100 + "%";
   $("vlab").textContent = view.z < 1.5 ? "Whole US" : view.z < 2.6 ? "Region" : view.z < 9 ? "State" : "City"; $("vtrack").setAttribute("aria-valuenow", Math.round(v * 100));
   drawPin();
@@ -1100,7 +1101,7 @@ function hmongPresence(){
     const t = p.querySelector("title"); if (t && n && !t.dataset.hm) { t.dataset.hm = 1; t.textContent += ` · about ${fmt(n)} Hmong residents (2020 Census)`; }
   });
   const g = document.getElementById("hTowns");
-  if (g && !g.childElementCount) g.innerHTML = HTOWNS.map(t => `<circle cx="${t.xy[0]}" cy="${t.xy[1]}" r="${Math.min(7, 1.6 + Math.sqrt(t.n) / 30)}"><title>${esc(t.c)}, ${esc(t.st)} · about ${fmt(t.n)} Hmong residents (2020 Census)</title></circle>`).join("");
+  if (g && !g.childElementCount) g.innerHTML = HTOWNS.map(t => `<circle cx="${t.xy[0]}" cy="${t.xy[1]}" style="--rt:${Math.min(7, 1.6 + Math.sqrt(t.n) / 30)}"><title>${esc(t.c)}, ${esc(t.st)} · about ${fmt(t.n)} Hmong residents (2020 Census)</title></circle>`).join("");
 }
 new MutationObserver(hmongPresence).observe(document.getElementById("wStates"), {childList: true});
 hmongPresence();
@@ -1199,7 +1200,7 @@ if ("serviceWorker" in navigator) {
   // a new version took over: show it right away (once), so people never sit on an old copy
   navigator.serviceWorker.addEventListener("controllerchange", () => { if (had && !sessionStorage.getItem("hmong-dir-reloaded")) { sessionStorage.setItem("hmong-dir-reloaded", "1"); location.reload(); } });
 }
-document.addEventListener("DOMContentLoaded", () => { const f = document.createElement("p"); f.className = "note"; f.style.cssText = "text-align:center;padding:8px 16px 24px"; f.textContent = "App version: updated 05 Nov 2026, 02:15"; document.body.appendChild(f); });
+document.addEventListener("DOMContentLoaded", () => { const f = document.createElement("p"); f.className = "note"; f.style.cssText = "text-align:center;padding:8px 16px 24px"; f.textContent = "App version: updated 05 Nov 2026, 02:18"; document.body.appendChild(f); });
 (() => {
   const bar = document.getElementById("installBar"), btn = document.getElementById("installBtn");
   const installed = matchMedia("(display-mode: fullscreen), (display-mode: standalone)").matches || navigator.standalone;
