@@ -477,8 +477,10 @@ html:is([data-style="light"],[data-style="story"],[data-style="gray"]) .tile .dm
   .room{grid-template-columns:minmax(0,1fr);min-height:0}
   .wall.left,.wall.right{transform:none;background:none;padding:12px 0}
   .wall.back{order:-1}
-  .areas,.regs{display:flex;gap:10px;overflow-x:auto;scrollbar-width:none;padding-bottom:4px}
-  .area{flex:none;width:200px;margin:0}
+  /* wrap instead of a hidden sideways scroll (Daniel, 5 Nov 2026) */
+  .areas,.regs{display:flex;flex-wrap:wrap;gap:8px 10px;overflow-y:auto;scrollbar-width:thin;padding-bottom:4px}
+  .regs{max-height:132px}
+  .area{flex:1 1 160px;width:auto;margin:0}
   .reg{flex:none;width:auto;margin:0;gap:10px}
   .wmap{aspect-ratio:auto}
   .wmap svg{position:relative;display:block;width:100%;height:auto;aspect-ratio:975/610}
@@ -1197,7 +1199,7 @@ if ("serviceWorker" in navigator) {
   // a new version took over: show it right away (once), so people never sit on an old copy
   navigator.serviceWorker.addEventListener("controllerchange", () => { if (had && !sessionStorage.getItem("hmong-dir-reloaded")) { sessionStorage.setItem("hmong-dir-reloaded", "1"); location.reload(); } });
 }
-document.addEventListener("DOMContentLoaded", () => { const f = document.createElement("p"); f.className = "note"; f.style.cssText = "text-align:center;padding:8px 16px 24px"; f.textContent = "App version: updated 05 Nov 2026, 02:11"; document.body.appendChild(f); });
+document.addEventListener("DOMContentLoaded", () => { const f = document.createElement("p"); f.className = "note"; f.style.cssText = "text-align:center;padding:8px 16px 24px"; f.textContent = "App version: updated 05 Nov 2026, 02:15"; document.body.appendChild(f); });
 (() => {
   const bar = document.getElementById("installBar"), btn = document.getElementById("installBtn");
   const installed = matchMedia("(display-mode: fullscreen), (display-mode: standalone)").matches || navigator.standalone;
