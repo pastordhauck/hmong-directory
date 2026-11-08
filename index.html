@@ -1817,6 +1817,58 @@ Object.assign(HCITY, {"abanda|AL":[695.4,422.5],"abbeville|AL":[704.3,456.6],"ad
     q = q.replace(/^\s*(?:please\s+)?(?:find|show|search for|look for|where is|where are|i need|we need)\s+(?:me\s+)?(?:a|an|the|some)?\s*/i, "").trim();
     if (q !== qi.value) qi.value = q;
   }
+  // ---- real-life situations: "homeless guy needs help in Arlington, Texas", "financial help in Arlington, TX" (Daniel, 8 Nov 2026) ----
+  // Finds the needs in the words, finds the place, then shows a plan: urgent help first, then nearby churches and local places.
+  const STN = {alabama: "AL", alaska: "AK", arizona: "AZ", arkansas: "AR", california: "CA", colorado: "CO", connecticut: "CT", delaware: "DE", florida: "FL", georgia: "GA", hawaii: "HI", idaho: "ID", illinois: "IL", indiana: "IN", iowa: "IA", kansas: "KS", kentucky: "KY", louisiana: "LA", maine: "ME", maryland: "MD", massachusetts: "MA", michigan: "MI", minnesota: "MN", mississippi: "MS", missouri: "MO", montana: "MT", nebraska: "NE", nevada: "NV", "new hampshire": "NH", "new jersey": "NJ", "new mexico": "NM", "new york": "NY", "north carolina": "NC", "north dakota": "ND", ohio: "OH", oklahoma: "OK", oregon: "OR", pennsylvania: "PA", "rhode island": "RI", "south carolina": "SC", "south dakota": "SD", tennessee: "TN", texas: "TX", utah: "UT", vermont: "VT", virginia: "VA", washington: "WA", "west virginia": "WV", wisconsin: "WI", wyoming: "WY", "district of columbia": "DC"};
+  const STRE = Object.keys(STN).sort((a, b) => b.length - a.length).join("|");
+  function placeIn(q) {   // "in Arlington, Texas" / "near Arlington TX" / "from 76010" -> a place, or null
+    let m = q.match(/\b(\d{5})\b/); if (m) { const pl = findPlace(m[1]); if (pl) return {pl, label: pl.label, text: m[0]}; }
+    const re = new RegExp(`\\b(?:in|near|around|from|at|by)\\s+([a-z .'-]+?)(?:,\\s*|\\s+)(${STRE}|[a-z]{2})\\b`, "i");
+    m = q.match(re); if (m) { const st = STN[m[2].toLowerCase()] || m[2].toUpperCase(); const pl = findPlace(`${m[1].trim()}, ${st}`); if (pl) return {pl, text: m[0]}; }
+    m = q.match(/\b(?:in|near|around)\s+([a-z .'-]+?)\s*$/i); if (m) { const pl = findPlace(m[1].trim()); if (pl) return {pl, text: m[0]}; }
+    return null;
+  }
+  const HELPSET = x => (x.sets || []).some(s => /Help for People in Need/i.test(s));
+  const NEEDS = [
+    {k: "danger", re: /\b(suicid\w*|kill (him|her|my|them)sel\w*|overdos\w*|in danger)\b/i, title: "In danger right now: call 911, or 988 for a crisis", sets: /Crisis and Mental Health/i},
+    {k: "mind", re: /\b(depress\w*|anxi\w*|panic|mental\w*|hopeless|stuck|struggling|lonely)\b/i, title: "Crisis and mental health", sets: /Crisis and Mental Health/i},
+    {k: "abuse", re: /\b(abus\w*|domestic|violen\w*|unsafe at home|beat(s|en|ing)?)\b/i, title: "Safety from abuse", words: "domestic violence abuse"},
+    {k: "shelter", re: /\b(homeless\w*|shelter\w*|evict\w*|nowhere to (sleep|stay|go)|place to (sleep|stay)|living in (his|her|their|a) car|stranded)\b/i, title: "A safe place to stay", pick: /shelter|rescue|salvation|211|findhelp/i},
+    {k: "food", re: /\b(hungry|hunger|food|meals?|groceries|eat)\b/i, title: "Food", pick: /food|feeding|salvation|211|vincent/i, local: 1},
+    {k: "money", re: /\b(money|financial\w*|finances?|rent|bills?|utilit\w*|electric\w*|broke|cash|afford|gas money|car payment|loan)\b/i, title: "Money, rent and bills", pick: /211|findhelp|vincent|catholic|salvation/i},
+    {k: "addiction", re: /\b(addict\w*|drugs?|alcohol\w*|drinking|sober\w*|recovery)\b/i, title: "Addiction and recovery", words: "recovery addiction"},
+    {k: "grief", re: /\b(grie\w*|died|death|funeral|passed away|widow\w*)\b/i, title: "Grief and loss", words: "grief"},
+    {k: "job", re: /\b(jobs?|work|unemploy\w*|laid off)\b/i, title: "Work and jobs", words: "job employment"}];
+  function situation(raw) {
+    const hits = NEEDS.filter(n => n.re.test(raw)); if (!hits.length) return false;
+    if (hits.some(n => n.k === "danger")) hits.splice(0, hits.length, ...hits.filter(n => n.k !== "mind"));
+    const pi = placeIn(raw), c = pi ? pi.pl : centerNow(), rows = [], seen = new Set();
+    // a state-only helper (like "South Carolina 211") shows only for that state
+    const stOk = x => { const m = (x.n || "").toLowerCase().match(new RegExp(`^(${STRE})\\b`)); return !m || (c && STN[m[1]] === c.st); };
+    const add = (title, items, fresh) => { const one = new Set(); items = items.filter(x => x && stOk(x) && !one.has(x.n) && one.add(x.n) && (!fresh || !seen.has(x.n))); items.forEach(x => seen.add(x.n)); if (items.length) rows.push({title, count: items.length, items}); };
+    for (const n of hits) {
+      let items = [];
+      if (n.sets) items = ITEMS.filter(x => (x.sets || []).some(s => n.sets.test(s)));
+      if (n.pick) items = ITEMS.filter(x => HELPSET(x) && n.pick.test(`${x.n} ${x.u}`));
+      if (n.words && typeof rankedList === "function") items = (rankedList(n.words) || []).filter(x => !x.place).slice(0, 15);
+      if (n.local && c) items = [...PL.map(p => ({p, d: mi(c.xy, p.xy)})).filter(r => r.d <= 60).sort((a, b) => a.d - b.d).map(({p, d}) => ({n: p.n, c: p.h + " · " + milesTxt(d), u: p.u || "", sets: [], line: `${milesTxt(d)} · ${p.t}, ${p.s}.${p.ph ? " Phone " + p.ph + "." : ""}`, about: `${p.n} in ${p.t}, ${p.s}. Call before you go.`})), ...items];
+      add(n.title, items);
+    }
+    if (c) {   // churches can pray, visit and often help through Community Services or a food pantry
+      const ch = churches().filter(y => y.xy).map(y => [mi(c.xy, y.xy), y]).filter(([d]) => d <= 40).sort((a, b) => a[0] - b[0]).slice(0, 15);
+      const CHL = "Churches"; add(`${CHL} near ${c.label}: call and ask about help`, ch.map(([d, y]) => ({n: y.n, c: KIND(y) + " · " + milesTxt(d), u: y.u || "", sets: [], place: y, line: `${milesTxt(d)} · ${[y.p, y.st].filter(Boolean).join(", ")}`})));
+    }
+    add("More places that help anywhere", ITEMS.filter(HELPSET), 1);
+    window.lpMiles = 30; center = c || null; resultsPage(rows, c || null);
+    const needs = hits.map(n => ({danger: "someone in danger", mind: "mental health", abuse: "safety", shelter: "a place to stay", food: "food", money: "money and bills", addiction: "recovery", grief: "grief", job: "work"})[n.k]);
+    S("tEye").textContent = "Help for a situation";
+    S("tTitle").textContent = needs.join(", ").replace(/, ([^,]*)$/, " and $1") + (c ? ` near ${c.label}` : "");
+    S("tSub").textContent = `Most urgent first. ${c ? "Distances are straight-line miles." : "Add a town, like “in Arlington, TX”, to see churches and places close by."} Call ahead: hours and help change.`;
+    return true;
+  }
+  qf.addEventListener("submit", ev => {   // a situation gets a help plan
+    if (situation(S("q").value || "")) { ev.preventDefault(); ev.stopImmediatePropagation(); }
+  }, true);
   qf.addEventListener("submit", ev => {   // a plain search uses the default place too, nearest first
     parseNear();
     const c = centerNow(); if (!(SS.near === "auto" || SS.near === "me" || SS.near === "church" || SS.near === "other") || !c) return;
@@ -1981,7 +2033,7 @@ if ("serviceWorker" in navigator) {
   // a new version took over: show it right away (once), so people never sit on an old copy
   navigator.serviceWorker.addEventListener("controllerchange", () => { if (had && !sessionStorage.getItem("hmong-dir-reloaded")) { sessionStorage.setItem("hmong-dir-reloaded", "1"); location.reload(); } });
 }
-document.addEventListener("DOMContentLoaded", () => { const f = document.createElement("p"); f.className = "note"; f.style.cssText = "text-align:center;padding:8px 16px 24px"; f.textContent = "App version: updated 08 Nov 2026, 01:48"; document.body.appendChild(f); });
+document.addEventListener("DOMContentLoaded", () => { const f = document.createElement("p"); f.className = "note"; f.style.cssText = "text-align:center;padding:8px 16px 24px"; f.textContent = "App version: updated 08 Nov 2026, 01:57"; document.body.appendChild(f); });
 (() => {
   const bar = document.getElementById("installBar"), btn = document.getElementById("installBtn");
   const installed = matchMedia("(display-mode: fullscreen), (display-mode: standalone)").matches || navigator.standalone;
