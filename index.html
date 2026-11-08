@@ -540,6 +540,9 @@ html:is([data-style="light"],[data-style="story"],[data-style="gray"]) .tile .dm
 #L-room .tile .th{aspect-ratio:16/6}
 #L-room #roomInfo{min-height:0;max-height:145px;overflow-y:auto}
 }
+#qsug{max-width:560px;margin:6px auto 0;background:var(--panel,#111a2e);border:1px solid rgba(255,255,255,.14);border-radius:14px;overflow:hidden;text-align:left;position:relative;z-index:5}#qsug button{display:flex;flex-direction:column;align-items:flex-start;width:100%;padding:10px 14px;background:none;border:0;border-bottom:1px solid rgba(255,255,255,.08);color:inherit;font:inherit;text-align:left;cursor:pointer}#qsug button:hover,#qsug button:focus-visible{background:rgba(224,182,90,.16)}#qsug small{opacity:.7;font-size:12px}#qsug [data-all]{color:var(--gold,#e0b65a);font-weight:700;border-bottom:0}
+/* See all sits right next to the A–Z button */
+.lineup .lh{justify-content:flex-start}.lineup .lh .all{margin-left:auto}
 </style>
 
 <header class="top"><div class="in">
@@ -567,7 +570,7 @@ html:is([data-style="light"],[data-style="story"],[data-style="gray"]) .tile .dm
       <span class="eyebrow" data-rise>For the Hmong community</span>
       <h1 data-rise style="--k:1">Hmong churches, help and services, in one place.</h1>
       <p data-rise style="--k:2">Churches, doctors, translators, lawyers, nonprofits, food and Hmong Bibles across the US. Slide through, then go deeper into anything.</p>
-      <form class="sbar" id="qform" data-rise style="--k:3"><span aria-hidden="true">⌕</span><input id="q" placeholder="Search: translator, Fresno, clinic, Bible…" aria-label="Search"><button class="btn gold">Search</button></form>
+      <form class="sbar" id="qform" data-rise style="--k:3"><span aria-hidden="true">⌕</span><input id="q" placeholder="Search: translator, Fresno, clinic, Bible…" aria-label="Search"><button class="btn gold">Search</button></form><div id="qsug" hidden role="listbox" aria-label="Search suggestions"></div>
       <div class="pills" data-rise style="--k:4"><button class="pill" data-pill="near">Near you</button><button class="pill" data-q="Churches">Churches</button><button class="pill" data-q="Doctors">Doctors</button><button class="pill" data-q="Translators">Translators</button><button class="pill" data-q="Lawyers">Lawyers</button><button class="pill" data-q="Restaurants">Restaurants</button><button class="pill" data-q="Nonprofits">Nonprofits</button></div>
       <select class="msel2" id="person" aria-label="Search by person" data-rise style="--k:5"></select>
       <div class="nums" data-rise style="--k:5"><div><b id="nTotal"></b>listings</div><div><b id="nCh"></b>Hmong churches</div><div><b id="nSt"></b>states</div></div>
@@ -745,7 +748,7 @@ function rowsBlock(box, key, rows){ ROWSETS[key] = rows; PAGE[key] = 0; drawRows
 function rowCar(key, i, r){
   CARS[key + i] = carousel($(`${key}t${i}`), r.items.slice(0, 60), x => `<div class="th">${card(x)}</div><b>${esc(x.n)}</b><small>${esc(x.c)}</small>`, (x, j, open, pt) => {
       if (!x) { $(`${key}i${i}`).innerHTML = `<p>Nothing here yet.</p>`; return; }
-      if (open) return openDetail(x, pt);
+      if (open) return x.place ? openPlace(x.place, pt) : openDetail(x, pt);
       $(`${key}i${i}`).innerHTML = `<span class="k">${esc(x.c)}</span><h3>${esc(x.n)}</h3><p>${esc(x.line)}</p><div class="acts"><button class="btn gold" data-deep="${key}:${i}:${j}">Go deeper →</button>${x.u ? `<a class="btn" href="${esc(x.u)}" target="_blank" rel="noopener">Website ↗</a>` : ""}</div>`;
     }, "big");;
 }
@@ -758,7 +761,7 @@ function drawRows(box, key){
     rowCar(key, i, r); });
 }
 document.addEventListener("click", e => {
-  const d = e.target.closest("[data-deep]"); if (d) { const [key, i, j] = d.dataset.deep.split(":"); return openDetail(ROWSETS[key][+i].items[+j], at(e)); }
+  const d = e.target.closest("[data-deep]"); if (d) { const [key, i, j] = d.dataset.deep.split(":"), it = ROWSETS[key][+i].items[+j]; return it.place ? openPlace(it.place, at(e)) : openDetail(it, at(e)); }
   const a = e.target.closest("[data-all]"); if (a) { const [key, i] = a.dataset.all.split(":"), r = ROWSETS[key][+i]; return openList("Topic", r.title.replace(/^Explore |\.$/g, ""), `${fmt(r.count ?? r.items.length)} on the list${r.items.length < (r.count ?? 0) ? `; the draft shows the first ${r.items.length}` : ""}.`, [], r.items, at(e)); }
   const m = e.target.closest("[data-more]"); if (m) { const key = m.dataset.more, n = Math.ceil(ROWSETS[key].length / ROWN); PAGE[key] = (PAGE[key] + 1) % n;
     const box = key === "h" ? $("lineups") : $("tRows"); drawRows(box, key); box.scrollIntoView({behavior: calm ? "auto" : "smooth", block: "start"}); }
@@ -834,7 +837,19 @@ const markView = () => document.querySelectorAll("#setView button").forEach(b =>
 $("setView").onclick = e => { const b = e.target.closest("[data-v]"); if (!b) return; lsSet("hcd-sview", b.dataset.v); markView(); if (LIST && !$("tFilt").hidden) { drawFilt(); drawCards(); } };
 markView();
 // search: see the whole-list search below
-$("qform").onsubmit = e => { e.preventDefault(); search($("q").value, [innerWidth / 2, 220]); };
+$("qform").onsubmit = e => { e.preventDefault(); sugHide(); search($("q").value, [innerWidth / 2, 220]); };
+// results as you type: a short list under the box after a pause; Enter still opens the full list, clearing the box hides it
+let sugT = 0; const sugHide = () => { clearTimeout(sugT); const d = $("qsug"); if (d) { d.hidden = true; d.innerHTML = ""; } };
+$("q").addEventListener("input", () => { clearTimeout(sugT); const v = $("q").value.trim(); if (v.length < 2) { sugHide(); return; }
+  sugT = setTimeout(() => { const cur = $("q").value.trim(); if (cur !== v) return; const pk = [innerWidth / 2, 220]; pk.peek = (list, n) => {
+    const d = $("qsug"); if (!list.length) { d.innerHTML = '<p class="hint" style="margin:6px 0">Nothing yet. Keep typing, or try fewer words.</p>'; d.hidden = false; return; }
+    d.innerHTML = list.slice(0, 6).map((x, i) => `<button type="button" data-i="${i}"><b>${esc(x.n)}</b><small>${esc(x.c || "")}</small></button>`).join("") + `<button type="button" data-all="1">See all ${fmt(n)} results ›</button>`;
+    d.hidden = false; d._l = list; }; search(cur, pk); }, 250); });
+document.addEventListener("click", e => { const d = $("qsug"); if (!d || d.hidden) return; const b = e.target.closest("#qsug button");
+  if (!b) { if (!e.target.closest("#qform")) sugHide(); return; }
+  const q = $("q").value, l = d._l || []; sugHide(); if (b.dataset.all) { search(q, [innerWidth / 2, 220]); return; }
+  const x = l[+b.dataset.i]; if (x) search(x.n, [innerWidth / 2, 220]); });
+
 document.querySelector(".pills").onclick = e => { const b = e.target.closest("[data-pill]"); if (!b) return; const v = b.dataset.pill;
   if (v === "free") { const hits = FEAT.filter(x => /\bfree\b/i.test(x.about) && !/free trial|\bpaid\b/i.test(x.about)); return openList("Free", "Free resources", `${fmt(hits.length)} free resources on the list.`, [], hits, at(e)); }
   if (v === "near") return section("L-room");
@@ -1146,7 +1161,8 @@ const flat = s => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 const stem = w => { const v = w.replace(/(ing|ers|er|ed)$/, ""); return v.length >= 5 && v !== w ? v : w.length > 4 ? w.replace(/(es|s)$/, "") : w; };
 function search(q, pt){
   q = q.trim(); if (!q) return;
-  const words = q.toLowerCase().split(/\s+/).filter(w => w.length > 1).map(stem), qf = flat(q);
+  const STOP = /^(a|an|the|to|of|in|on|for|with|and|or|my|me|he|she|they|his|her|is|are|was|needs?|need|wants?|help|helps|someone|person|who|that|this|can|get|find|place|places|where|i|we|you|it|have|has)$/;
+  const words = q.toLowerCase().split(/\s+/).filter(w => w.length > 1 && !(pt.loose && STOP.test(w))).map(stem), qf = flat(q);
   // ranked, typo-tolerant: whole word > starts with > inside a word > one or two letters off; the name counts most
   const ed = (a, b, m) => { if (Math.abs(a.length - b.length) > m) return m + 1; let p = Array.from({length: b.length + 1}, (_, j) => j);
     for (let i = 1; i <= a.length; i++) { const c = [i]; let lo = i; for (let j = 1; j <= b.length; j++) { c[j] = Math.min(p[j] + 1, c[j - 1] + 1, p[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); lo = Math.min(lo, c[j]); } if (lo > m) return m + 1; p = c; }
@@ -1157,19 +1173,27 @@ function search(q, pt){
       else if (m && best < 2 && k[0] === w[0] && ed(w, k.length > w.length + m ? k.slice(0, w.length) : k, m) <= m) best = 2; }
     return best; };
   const score = (name, hay) => { const hl = hay.toLowerCase(), hf = flat(hl), nl = name.toLowerCase(), nt = toks(nl), ht = toks(hl); let s = 0;
-    for (const w of words) { const wn = wscore(w, nt), wh = wn || wscore(w, ht) || (hf.includes(flat(w)) && flat(w).length > 1 ? 3 : 0); if (!wh) return -1; s += wn ? wn * 3 : wh; }
+    for (const w of words) { const wn = wscore(w, nt), wh = wn || wscore(w, ht) || (hf.includes(flat(w)) && flat(w).length > 1 ? 3 : 0); if (!wh) { if (pt.loose) continue; return -1; } s += wn ? wn * 3 : wh; }
+    if (!s) return -1;
     const nf = flat(name); return s + (nf === qf ? 100 : qf.length > 3 && nf.includes(qf) ? 50 : 0); };
   const hits = [];
-  ITEMS.forEach(x => { const s = score(x.n, `${x.n} ${x.c} ${x.about} ${x.sets.join(" ")} ${x.p} ${x.s} ${NAME[x.s] || ""}`.toLowerCase()); if (s >= 0) hits.push([s, x]); });
+  ITEMS.forEach(x => { const s = score(x.n + " " + x.sets.join(" "), `${x.n} ${x.c} ${x.about} ${x.sets.join(" ")} ${x.p} ${x.s} ${NAME[x.s] || ""}`.toLowerCase()); if (s >= 0) hits.push([s, x]); });
   const listed = new Set(ITEMS.map(x => flat(x.n) + "|" + flat(x.p)));   // Spanish churches are list entries too: show them once
   CH.forEach(x => { if (listed.has(flat(x.n) + "|" + flat(x.p))) return; const s = score(x.n, `${x.n} ${x.c} ${x.p} ${x.st} ${NAME[x.st] || ""} church ${x.lang}`.toLowerCase());
-    if (s >= 0) hits.push([s + (x.p && q.toLowerCase().includes(x.p.toLowerCase()) ? 10 : 0), {n: x.n, c: x.c || "Adventist church", line: `${[x.p, x.st].filter(Boolean).join(", ")}${x.svc ? " · " + x.svc : ""}`, about: "", pages: [], place: x}]); });
-  if (!hits.length && !pt.syn) { // nothing found: try everyday words that mean the same (small list, works offline)
-    const SYN = {preparer: "accountant", taxes: "tax", bereavement: "grief", dying: "grief", widow: "grief", sad: "depression", anxious: "anxiety", doctor: "health", sick: "health", diet: "vegetarian", cook: "recipe", cooking: "recipe", food: "recipe", lawyer: "legal", attorney: "legal", kid: "children", youth: "teen", teenager: "teen", baptism: "bible study", sermon: "preaching", song: "music", songs: "music", hymn: "music", donate: "giving", offering: "giving", tithe: "stewardship", budget: "money", loan: "money", retire: "pastor care", burnout: "pastor care", addiction: "recovery", drugs: "recovery", sabbath: "sabbath school"};
+    if (s >= 0) hits.push([s + (x.p && q.toLowerCase().includes(x.p.toLowerCase()) ? 10 : 0), {n: x.n, c: x.c || "Adventist church", line: `${[x.p, x.st].filter(Boolean).join(", ")}${x.svc ? " · " + x.svc : ""}`, about: "", pages: [], u: "", sets: ["Adventist churches"], place: x}]); });
+  if (!hits.length && !pt.loose) { // nothing found: swap in everyday words that mean the same, then let any word count (small list, works offline)
+    const SYN = {preparer: "accountant", taxes: "tax", bereavement: "grief", dying: "grief", widow: "grief", sad: "depression", anxious: "anxiety", doctor: "health", sick: "health", diet: "vegetarian", cook: "recipe", cooking: "recipe", food: "recipe", lawyer: "legal", attorney: "legal", kid: "children", youth: "teen", teenager: "teen", baptism: "bible study", sermon: "preaching", song: "music", songs: "music", hymn: "music", donate: "giving", offering: "giving", tithe: "stewardship", loan: "money", retire: "pastor care", burnout: "pastor care", addiction: "recovery", drugs: "recovery",
+      homeless: "shelter", housing: "shelter", stay: "shelter", sleep: "shelter", evicted: "shelter rent", eviction: "shelter rent", hungry: "food pantry", broke: "rent utilities", cash: "rent utilities", money: "rent utilities", bills: "utilities rent", electric: "utilities", stranded: "shelter", crisis: "shelter"};
     const q2 = q.toLowerCase().split(/\s+/).map(w => SYN[w] || SYN[stem(w)] || w).join(" ");
-    if (q2 !== q.toLowerCase()) { const p2 = [...pt]; p2.syn = 1; return search(q2, p2); } }
+    const p2 = [...pt]; p2.loose = 1; p2.peek = pt.peek; return search(q2, p2); }
   hits.sort((a, b) => b[0] - a[0]);
   const list = hits.slice(0, 400).map(h => h[1]);
+  if (pt.peek) return pt.peek(list, hits.length);
+  // like the resource pages: one carousel row per topic found (best topic first); one topic only = the plain list with its filters
+  const grp = new Map(); list.forEach(x => { const g = x.place ? "Adventist churches" : (x.sets && x.sets[0]) || x.c || "Other"; (grp.get(g) || grp.set(g, []).get(g)).push(x); });
+  if (grp.size > 1) { const rows = [...grp].map(([title, items]) => ({title, count: items.length, items}));
+    $("tEye").textContent = "Search"; $("tTitle").textContent = `“${q}”`; $("tSub").textContent = `${fmt(hits.length)} found in ${rows.length} topics${hits.length > 400 ? "; showing the best 400" : ""}. Tap “See all” on a topic for its full list.`;
+    $("tChips").innerHTML = ""; $("tCards").innerHTML = ""; $("tFilt").hidden = true; $("tCarNav").hidden = true; $("tRows").hidden = false; rowsBlock($("tRows"), "g", rows); go("L-topic", `“${q}”`, pt); return; }
   openList("Search", `“${q}”`, hits.length ? `${fmt(hits.length)} found${hits.length > 400 ? "; showing the best 400" : ""}. Churches open on their own map page.` : "Nothing found. Try fewer words, or a town or state name.", [], list, pt);
 }
 // person: Mark Finley, Doug Batchelor, Ellen White ...
@@ -1578,7 +1602,7 @@ if ("serviceWorker" in navigator) {
   // a new version took over: show it right away (once), so people never sit on an old copy
   navigator.serviceWorker.addEventListener("controllerchange", () => { if (had && !sessionStorage.getItem("hmong-dir-reloaded")) { sessionStorage.setItem("hmong-dir-reloaded", "1"); location.reload(); } });
 }
-document.addEventListener("DOMContentLoaded", () => { const f = document.createElement("p"); f.className = "note"; f.style.cssText = "text-align:center;padding:8px 16px 24px"; f.textContent = "App version: updated 07 Nov 2026, 17:52"; document.body.appendChild(f); });
+document.addEventListener("DOMContentLoaded", () => { const f = document.createElement("p"); f.className = "note"; f.style.cssText = "text-align:center;padding:8px 16px 24px"; f.textContent = "App version: updated 07 Nov 2026, 18:00"; document.body.appendChild(f); });
 (() => {
   const bar = document.getElementById("installBar"), btn = document.getElementById("installBtn");
   const installed = matchMedia("(display-mode: fullscreen), (display-mode: standalone)").matches || navigator.standalone;
